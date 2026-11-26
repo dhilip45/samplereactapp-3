@@ -32,12 +32,12 @@ services:
         condition: service_healthy
 
   frontend:
-    build: ./client
-    container_name: jobapp-frontend
-    ports:
-      - "3000:3000"
-    depends_on:
-      - backend
+  build: ./Client
+  container_name: react-frontend
+  ports:
+    - "3000:80"
+  depends_on:
+    - backend
 
 volumes:
   mysql_data:
