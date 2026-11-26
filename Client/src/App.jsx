@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 
-const API = "http://localhost:5000/api/applications";
+// Relative URL: nginx (Docker) or the Vite dev proxy forwards /api to the backend
+const API = import.meta.env.VITE_API_URL || "/api/applications";
 const empty = { full_name: "", email: "", phone: "", position: "", experience: 0, cover_letter: "" };
 
 export default function App() {

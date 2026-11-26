@@ -1,9 +1,10 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const mysql = require("mysql2/promise");
 
 const app = express();
-app.use(cors());
+app.use(cors(process.env.CORS_ORIGIN ? { origin: process.env.CORS_ORIGIN.split(",") } : undefined));
 app.use(express.json());
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
@@ -15,6 +16,7 @@ async function initDb() {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
+    port: Number(process.env.DB_PORT) || 3306,
     waitForConnections: true,
     connectionLimit: 10,
   });
@@ -84,4 +86,19 @@ app.delete("/api/applications/:id", async (req, res) => {
   res.json({ message: "Deleted" });
 });
 
-initDb().then(() => app.listen(5000, () => console.log("API on 5000")));
+// health check (handy for `curl localhost:5000/api/health`)
+app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
+
+// error handler (Express 5 forwards rejected async handlers here)
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(500).json({ error: "Server error" });
+});
+
+const PORT = Number(process.env.PORT) || 5000;
+initDb()
+  .then(() => app.listen(PORT, "0.0.0.0", () => console.log(`API on ${PORT}`)))
+  .catch((err) => {
+    console.error(err);
+    process.exit(1); // let Docker's restart policy try again
+  });
