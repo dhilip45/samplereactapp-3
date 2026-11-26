@@ -1,0 +1,41 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --primary: #6366f1;
+  --primary-dark: #4f46e5;
+  --danger: #ef4444;
+  --success: #22c55e;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --card: rgba(255, 255, 255, 0.92);
+}
+
+body {
+  min-height: 100vh;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: var(--text);
+  background: linear-gradient(-45deg, #6366f1, #8b5cf6, #ec4899, #38bdf8);
+  background-size: 400% 400%;
+  animation: gradientMove 15s ease infinite;
+  padding: 40px 16px;
+}
+
+@keyframes gradientMove {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* custom scrollbar */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-thumb { background: #a5b4fc; border-radius: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
