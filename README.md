@@ -1,135 +1,136 @@
-# Job Application App (React + Express + MySQL) with Docker Compose
+# Job Registration Application (React + Express + MySQL + Docker Compose)
 
-Job application form with full CRUD (Create, Read, Update, Delete).
+Full-stack Job Registration application with complete CRUD (Create, Read, Update, Delete), containerized with Docker Compose (compatible with Docker Compose standalone `1.29.2` and Compose format `3.8`).
 
-| Service  | Tech                    | Container port | Host port |
-|----------|-------------------------|----------------|-----------|
-| frontend | React (Vite) + Nginx    | 80             | **3000**  |
-| backend  | Node.js + Express 5     | 5000           | **5000**  |
-| mysql    | MySQL 8.0               | 3306           | **3306**  |
+## Architecture & Ports
 
+| Service | Container Name | Tech | Container Port | Host Port |
+|---|---|---|---:|---:|
+| `frontend` | `frontend-app` | React (Vite) + Nginx | 80 | **3000** |
+| `backend` | `backend-app` | Node.js 22 + Express 5 | 5000 | **5000** |
+| `mysql` | `mysql-db` | MySQL 8.0 | 3306 | **3306** |
+
+```text
+Browser ──> frontend-app (Nginx :80) ──/api/*──> backend-app (Express :5000) ──> mysql-db (:3306)
+             serves React dist/                    connects to host "mysql"       DB: docker_practice
 ```
-Browser ──> frontend (Nginx :80) ──/api/*──> backend (Express :5000) ──> mysql (:3306)
-                 serves React build            host "mysql" (service name)
-```
 
-The browser only calls **relative** URLs (`/api/applications`). Nginx forwards `/api/*` to the `backend` container, so no Docker-only hostname is ever used in the browser and CORS is not a problem.
+- The React frontend calls **relative** API paths (`/api/applications`), never `localhost`.
+- Nginx serves the production Vite `dist/` bundle, handles React SPA routing (`try_files $uri $uri/ /index.html;`), and proxies `/api/` requests to `http://backend:5000`.
+- The Express backend waits for the `mysql` health check, retries database connections until MySQL is ready, automatically creates the `applications` table in `docker_practice`, and then listens on `0.0.0.0:5000`.
 
-## Project structure (names are case-sensitive on Linux)
+## Project Structure (Case-Sensitive on Linux)
 
-```
-04-Docker/
-├── Client/                 React + Vite app
-│   ├── Dockerfile          multi-stage: node build -> nginx
-│   ├── nginx.conf          SPA routing + /api proxy
+```text
+samplereactapp-3/
+├── Client/
+│   ├── Dockerfile          # Multi-stage build: Node 22 -> Nginx (port 80)
+│   ├── nginx.conf          # SPA fallback + /api/ reverse proxy
 │   ├── .dockerignore
-│   └── src/ ...
-├── Server/                 Express API
-│   ├── Dockerfile
+│   ├── package.json
+│   ├── package-lock.json
+│   └── src/
+├── Server/
+│   ├── Dockerfile          # Node 22 Alpine production image (port 5000)
 │   ├── .dockerignore
-│   └── index.js
-├── docker-compose.yaml
-├── .env.example            copy to .env (git-ignored)
+│   ├── index.js            # Express API + MySQL pool & retry logic
+│   ├── package.json
+│   └── package-lock.json
+├── docker-compose.yaml     # Compose v3.8 (compatible with 1.29.2)
+├── .env.example            # Template environment variables
 ├── .gitignore
-└── README.md
+├── README.md
+└── CHANGELOG.md
 ```
 
-## Run on Killercoda (Docker Compose V1)
-
-Killercoda has `docker-compose` (with a hyphen). `docker compose` may not exist there.
+## Quick Start (Docker Compose 1.29.2 / Killercoda / Ubuntu)
 
 ```bash
-# 1. Get the project
-git clone <your-repo-url>
-cd 04-Docker            # (or: unzip 04-Docker.zip && cd 04-Docker)
-
-# 2. Check versions and folder names
+# 1. Verify Docker and Docker Compose versions
 docker --version
 docker-compose --version
-ls                      # must show: Client  Server  docker-compose.yaml
 
-# 3. Create your env file and set passwords
+# 2. Extract uploaded ZIP and enter project directory
+unzip samplereactapp-3.zip
+cd samplereactapp-3
+ls -la   # Verify Client/, Server/, docker-compose.yaml, .env.example
+
+# 3. Create .env from .env.example and customize passwords
 cp .env.example .env
-nano .env
+nano .env   # Set strong MYSQL_ROOT_PASSWORD and MYSQL_PASSWORD
 
-# 4. Build and start everything
+# 4. Validate Compose YAML
+docker-compose config
+
+# 5. Build and start all containers in detached mode
 docker-compose up -d --build
 
-# 5. Verify
-docker ps
+# 6. Check container status and logs
 docker-compose ps
-docker-compose logs backend     # expect: DB ready / API on 5000
+docker-compose logs mysql
+docker-compose logs backend
+docker-compose logs frontend
 ```
 
-### Open the app
+## API Endpoints
 
-- **Killercoda:** top-right menu **Traffic / Ports** -> enter port **3000** -> Access.
-  (`localhost:3000` does not work in your own browser there.)
-- **Local PC:** http://localhost:3000
-- Test the API: `curl http://localhost:5000/api/health` and `curl http://localhost:3000/api/applications`
-  (the second one goes through Nginx).
+- `GET /api/health` — Database connectivity & API health check
+- `POST /api/applications` — Create a job application (`full_name`, `email`, `position` required)
+- `GET /api/applications` — List all applications (newest first)
+- `GET /api/applications/:id` — Get a single application by ID
+- `PUT /api/applications/:id` — Update an application by ID
+- `DELETE /api/applications/:id` — Delete an application by ID
 
-### Test CRUD from the terminal
+## Verify Endpoints & Persistence
 
 ```bash
+# Test frontend served by Nginx
+curl -I http://localhost:3000
+
+# Test backend health directly and through Nginx
+curl http://localhost:5000/api/health
+curl http://localhost:3000/api/health
+
+# Test CRUD through Nginx
 curl -X POST http://localhost:3000/api/applications \
   -H "Content-Type: application/json" \
-  -d '{"full_name":"Arun","email":"arun@test.com","position":"Developer","experience":2}'
+  -d '{"full_name":"Arun Kumar","email":"arun@example.com","phone":"9876543210","position":"DevOps Engineer","experience":3,"cover_letter":"Excited to apply."}'
+
 curl http://localhost:3000/api/applications
+curl http://localhost:3000/api/applications/1
+
+curl -X PUT http://localhost:3000/api/applications/1 \
+  -H "Content-Type: application/json" \
+  -d '{"full_name":"Arun Kumar","email":"arun@example.com","phone":"9876543210","position":"Senior DevOps Engineer","experience":4,"cover_letter":"Updated letter."}'
+
 curl -X DELETE http://localhost:3000/api/applications/1
+
+# Inspect MySQL database and applications table
+docker exec -it mysql-db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "SHOW DATABASES; USE docker_practice; SHOW TABLES; SELECT * FROM applications;"'
+
+# Stop and restart while keeping database volume intact
+docker-compose down
+docker-compose up -d
 ```
 
-### Inspect the database
+## Local Development (Without Docker)
 
 ```bash
-docker exec -it jobapp-mysql sh -c 'mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -e "SELECT * FROM applications;"'
-```
-
-## Useful commands
-
-```bash
-docker-compose logs                 # all logs
-docker-compose logs frontend
-docker-compose logs backend
-docker-compose logs mysql
-docker-compose logs -f backend      # follow (Ctrl+C to exit)
-docker-compose restart backend
-docker-compose up -d --build backend   # rebuild one service
-docker-compose down                 # stop, keep data
-docker-compose down -v              # stop AND delete MySQL data
-```
-
-On Docker Compose V2 (Docker Desktop on Windows/Mac) use `docker compose` (with a space) instead.
-
-## Run without Docker (development)
-
-```bash
-# terminal 1 - needs a local MySQL; create Server/.env with DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+# 1. Start local MySQL and create database `docker_practice`
+# 2. Configure Server/.env with DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME=docker_practice
 cd Server && npm install && npm run dev
-# terminal 2 - Vite proxies /api to localhost:5000
-cd Client && npm install && npm run dev      # http://localhost:3000
+
+# 3. Start Vite dev server (proxies /api to http://localhost:5000)
+cd Client && npm install && npm run dev
 ```
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `failed to read dockerfile: open Dockerfile: no such file` | Built from the root folder | Run `docker-compose up -d --build` from the folder containing `docker-compose.yaml`; compose uses `./Client` and `./Server` |
-| `build path .../server either does not exist` | Wrong capitalization | Folder is `Server` (capital S). Linux is case-sensitive |
-| `unknown shorthand flag: 'd' in -d` | Used `docker compose` on a V1 machine | Use `docker-compose up -d --build` |
-| `docker : The term 'docker' is not recognized` (Windows) | Docker Desktop not installed or not running | Install/start Docker Desktop, open a new terminal |
-| Warning `variable MYSQL_PASSWORD is not set` | No `.env` file | `cp .env.example .env` |
-| Backend log `ER_ACCESS_DENIED_ERROR` | MySQL volume was created with older passwords | `docker-compose down -v` then `docker-compose up -d --build` (deletes data) |
-| Backend log `Waiting for DB... ECONNREFUSED` | MySQL still starting | Wait about 30 s; it retries. Check `docker-compose logs mysql` |
-| `Bind for 0.0.0.0:3306 failed: port is already allocated` | Another MySQL uses 3306 | Change left side in compose, e.g. `"3307:3306"` (backend still uses 3306 internally) |
-| `Bind ... 3000 / 5000 already allocated` | Local dev server running | Stop it, or change the host port |
-| Page loads but list is empty / "Something went wrong" | Backend down or `/api` not proxied | `docker-compose ps`, `docker-compose logs backend`, then `curl localhost:5000/api/health` |
-| `502 Bad Gateway` on `/api/...` | Backend crashed or not started | `docker-compose logs backend`, then `docker-compose restart backend` |
-| Refreshing a page shows 404 | SPA fallback missing | `Client/nginx.conf` must contain `try_files $uri $uri/ /index.html;` |
-| Code changes not showing | Old image | `docker-compose up -d --build` |
-| `http+docker` / `URLSchemeUnknown` error from docker-compose | Old docker-compose 1.29.2 with newer Python `requests` | `pip install "requests<2.32"` (or use `docker compose` V2 if available) |
-
-## Security
-
-- Passwords live in `.env` (git-ignored). Only `.env.example` is committed.
-- Do not publish port 3306 on a public server; remove the `3306:3306` mapping from `docker-compose.yaml` if you do not need external DB access.
+| `build path ./client either does not exist` | Linux is case-sensitive | Ensure folders are `Client/` and `Server/` matching `docker-compose.yaml` |
+| `Warning: The "MYSQL_..." variable is not set` | `.env` file missing | Run `cp .env.example .env` in the project root |
+| `ER_ACCESS_DENIED_ERROR` in backend logs | MySQL volume initialized with older credentials | Run `docker-compose down -v && docker-compose up -d --build` (warning: resets DB volume) |
+| `502 Bad Gateway` on `/api/*` | Backend still starting or crashed | Check `docker-compose logs backend` |
+| Port `3000`, `5000`, or `3306` already allocated | Another service uses the port | Stop conflicting service or change the host port (left side) in `docker-compose.yaml` |
+| `http+docker` / `URLSchemeUnknown` in `docker-compose` 1.29.2 | Python `requests >= 2.32` incompatibility | Run `pip install "requests<2.32"` or upgrade `docker-compose` |

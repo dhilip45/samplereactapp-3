@@ -1,58 +1,127 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 
 // Relative URL: nginx (Docker) or the Vite dev proxy forwards /api to the backend
 const API = import.meta.env.VITE_API_URL || "/api/applications";
 const empty = { full_name: "", email: "", phone: "", position: "", experience: 0, cover_letter: "" };
 
+async function requestJson(url, options) {
+  const res = await fetch(url, options);
+  const text = await res.text();
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+  }
+  if (!res.ok) {
+    throw new Error((data && data.error) || `Request failed (${res.status})`);
+  }
+  return data;
+}
+
 export default function App() {
   const [form, setForm] = useState(empty);
   const [list, setList] = useState([]);
   const [editId, setEditId] = useState(null);
   const [removingId, setRemovingId] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
+  const toastTimerRef = useRef(null);
 
-  const load = async () => setList(await (await fetch(API)).json());
-  useEffect(() => { load(); }, []);
-
-  const notify = (msg, type = "ok") => {
+  const notify = useCallback((msg, type = "ok") => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 2500);
-  };
+    toastTimerRef.current = setTimeout(() => setToast(null), 2500);
+  }, []);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await requestJson(API);
+      setList(Array.isArray(data) ? data : []);
+    } catch (err) {
+      notify(err.message || "Failed to load applications", "error");
+    }
+  }, [notify]);
+
+  useEffect(() => {
+    let active = true;
+    requestJson(API)
+      .then((data) => {
+        if (active) setList(Array.isArray(data) ? data : []);
+      })
+      .catch((err) => {
+        if (active) notify(err.message || "Failed to load applications", "error");
+      });
+    return () => {
+      active = false;
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, [notify]);
 
   const change = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
   const submit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     try {
-      await fetch(editId ? `${API}/${editId}` : API, {
+      const payload = {
+        full_name: form.full_name,
+        email: form.email,
+        phone: form.phone,
+        position: form.position,
+        experience: form.experience === "" ? 0 : Number(form.experience),
+        cover_letter: form.cover_letter,
+      };
+      await requestJson(editId ? `${API}/${editId}` : API, {
         method: editId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       notify(editId ? "Application updated ✔" : "Application submitted ✔");
       setForm(empty);
       setEditId(null);
-      load();
-    } catch {
-      notify("Something went wrong", "error");
+      await load();
+    } catch (err) {
+      notify(err.message || "Something went wrong", "error");
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const edit = (a) => {
     setEditId(a.id);
-    setForm(a);
+    setForm({
+      full_name: a.full_name || "",
+      email: a.email || "",
+      phone: a.phone || "",
+      position: a.position || "",
+      experience: a.experience ?? 0,
+      cover_letter: a.cover_letter || "",
+    });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const remove = async (id) => {
+  const remove = (id) => {
     if (!confirm("Delete this application?")) return;
     setRemovingId(id);
     setTimeout(async () => {
-      await fetch(`${API}/${id}`, { method: "DELETE" });
-      setRemovingId(null);
-      notify("Application deleted", "error");
-      load();
+      try {
+        await requestJson(`${API}/${id}`, { method: "DELETE" });
+        if (editId === id) {
+          setEditId(null);
+          setForm(empty);
+        }
+        notify("Application deleted", "error");
+        await load();
+      } catch (err) {
+        notify(err.message || "Failed to delete application", "error");
+      } finally {
+        setRemovingId(null);
+      }
     }, 350);
   };
 
@@ -89,7 +158,9 @@ export default function App() {
         </div>
 
         <div className="btn-row" style={{ marginTop: 20 }}>
-          <button type="submit" className="btn-primary">{editId ? "Update" : "Submit"}</button>
+          <button type="submit" className="btn-primary" disabled={submitting}>
+            {submitting ? "Saving..." : editId ? "Update" : "Submit"}
+          </button>
           {editId && (
             <button type="button" className="btn-secondary" onClick={() => { setEditId(null); setForm(empty); }}>
               Cancel
