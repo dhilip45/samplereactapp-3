@@ -3,16 +3,16 @@ services:
 
   # 1. MYSQL DATABASE
   mysql:
-  image: mysql:8.0
-  container_name: mysql-db
-  restart: always
-  environment:
-    MYSQL_ROOT_PASSWORD: root123
-    MYSQL_DATABASE: docker_practice
-  ports:
-    - "3306:3306"
-  volumes:
-    - mysql_data:/var/lib/mysql
+    image: mysql:8.0
+    container_name: mysql-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: docker_practice
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot123"]
       interval: 10s
@@ -31,7 +31,7 @@ services:
       DB_PORT: 3306
       DB_USER: root
       DB_PASSWORD: root123
-      DB_NAME: wfm_database
+      DB_NAME: docker_practice
     depends_on:
       mysql:
         condition: service_healthy
